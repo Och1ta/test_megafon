@@ -1,10 +1,19 @@
 import asyncio
 import logging
 import random
+import sqlite3
+from datetime import datetime
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Инициализация базы данных
+db = sqlite3.connect('requests.db')
+cursor = db.cursor()
+cursor.execute('''CREATE TABLE IF NOT EXISTS requests
+                  (client_ip TEXT, message TEXT, timestamp TEXT)''')
+db.commit()
 
 
 # TCP-сервер
@@ -17,7 +26,14 @@ async def handle_client(reader, writer):
             data = await reader.read(100)
             if not data:
                 break
-            logger.info(f'Получено: {data.decode()} от {addr}')
+            message = data.decode()
+            logger.info(f'Получено: {message} от {addr}')
+
+            # Запись в базу данных
+            cursor.execute("INSERT INTO requests (client_ip, message, timestamp) VALUES (?, ?, ?)",
+                           (str(addr), message, datetime.now().isoformat()))
+            db.commit()
+
             writer.write(data)
             await writer.drain()
     except asyncio.CancelledError:
@@ -90,3 +106,5 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info('Программа прервана пользователем')
+    finally:
+        db.close()  # Закрытие соединения с базой данных
